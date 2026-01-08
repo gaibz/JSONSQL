@@ -1,0 +1,9 @@
+{
+  "from": "orders",
+  "select": ["id", "created_at"],
+  "order_by": [
+    { "field": "created_at", "dir": "desc" }
+  ],
+  "limit": 20,
+  "offset": 40
+}
