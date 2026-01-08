@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/jsonsql/JSONSQL_V1.schema.json",
+  "title": "JSONSQL v1 Request Schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["from"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Optional explicit JSONSQL version string.",
+      "default": "1.0",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    },
+
+    "from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resource name (must be resolved by server registry)."
+    },
+
+    "select": {
+      "type": "array",
+      "description": "Fields to select (string) or field+alias objects.",
+      "items": { "$ref": "#/$defs/SelectItem" },
+      "minItems": 1
+    },
+
+    "where": {
+      "$ref": "#/$defs/WhereExpr",
+      "description": "Recursive boolean expression for filtering."
+    },
+
+    "order_by": {
+      "type": "array",
+      "description": "Sorting rules (ordered).",
+      "items": { "$ref": "#/$defs/OrderByItem" }
+    },
+
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "Max rows to return (server should enforce its own cap)."
+    },
+
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Offset for pagination."
+    },
+
+    "include": {
+      "type": "object",
+      "description": "Relation includes (server-defined relations only).",
+      "additionalProperties": { "$ref": "#/$defs/IncludeQuery" }
+    },
+
+    "aggregate": {
+      "type": "array",
+      "description": "Aggregation selections.",
+      "items": { "$ref": "#/$defs/AggregateItem" },
+      "minItems": 1
+    },
+
+    "group_by": {
+      "type": "array",
+      "description": "Group-by fields.",
+      "items": { "$ref": "#/$defs/FieldName" },
+      "minItems": 1
+    },
+
+    "having": {
+      "$ref": "#/$defs/WhereExpr",
+      "description": "Recursive boolean expression for HAVING (often refers to aggregate aliases)."
+    }
+  },
+
+  "$defs": {
+    "FieldName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Logical field name. Whitelisting is enforced by server."
+    },
+
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+
+    "SelectItem": {
+      "oneOf": [
+        { "$ref": "#/$defs/FieldName" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["field"],
+          "properties": {
+            "field": { "$ref": "#/$defs/FieldName" },
+            "as": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Alias name for the selected field."
+            }
+          }
+        }
+      ]
+    },
+
+    "OrderByItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field"],
+      "properties": {
+        "field": { "$ref": "#/$defs/FieldName" },
+        "dir": {
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "asc"
+        }
+      }
+    },
+
+    "Scalar": {
+      "description": "JSON scalar values.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "integer" },
+        { "type": "boolean" },
+        { "type": "null" }
+      ]
+    },
+
+    "Value": {
+      "description": "Value payload for operators (scalar or array).",
+      "oneOf": [
+        { "$ref": "#/$defs/Scalar" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Scalar" }
+        }
+      ]
+    },
+
+    "BetweenValue": {
+      "type": "array",
+      "description": "Between values [min, max].",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/Scalar" }
+    },
+
+    "WhereLeaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "op"],
+      "properties": {
+        "field": { "$ref": "#/$defs/FieldName" },
+
+        "op": {
+          "type": "string",
+          "enum": [
+            "=",
+            "!=",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "in",
+            "not_in",
+            "like",
+            "not_like",
+            "starts_with",
+            "ends_with",
+            "contains",
+            "between",
+            "is_null",
+            "not_null"
+          ]
+        },
+
+        "value": { "$ref": "#/$defs/Value" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "op": { "enum": ["is_null", "not_null"] } },
+            "required": ["op"]
+          },
+          "then": {
+            "not": { "required": ["value"] }
+          }
+        },
+        {
+          "if": {
+            "properties": { "op": { "const": "between" } },
+            "required": ["op"]
+          },
+          "then": {
+            "required": ["value"],
+            "properties": {
+              "value": { "$ref": "#/$defs/BetweenValue" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "op": { "enum": ["in", "not_in"] } },
+            "required": ["op"]
+          },
+          "then": {
+            "required": ["value"],
+            "properties": {
+              "value": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/Scalar" }
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "WhereExpr": {
+      "description": "Recursive boolean expression tree.",
+      "oneOf": [
+        { "$ref": "#/$defs/WhereLeaf" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["and"],
+          "properties": {
+            "and": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/WhereExpr" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["or"],
+          "properties": {
+            "or": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/WhereExpr" }
+            }
+          }
+        }
+      ]
+    },
+
+    "AggregateItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fn", "as"],
+      "properties": {
+        "fn": {
+          "type": "string",
+          "enum": ["count", "sum", "avg", "min", "max"]
+        },
+        "field": {
+          "$ref": "#/$defs/FieldName",
+          "description": "Required for sum/avg/min/max; optional for count."
+        },
+        "as": { "$ref": "#/$defs/Identifier" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "fn": { "const": "count" } }, "required": ["fn"] },
+          "then": {
+            "description": "count may omit field (implementation-defined: count(*) or count(field))."
+          }
+        },
+        {
+          "if": {
+            "properties": { "fn": { "enum": ["sum", "avg", "min", "max"] } },
+            "required": ["fn"]
+          },
+          "then": { "required": ["field"] }
+        }
+      ]
+    },
+
+    "IncludeQuery": {
+      "type": "object",
+      "description": "Nested query for a relation include (server controls allowed relations and depth).",
+      "additionalProperties": false,
+      "properties": {
+        "select": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SelectItem" },
+          "minItems": 1
+        },
+        "where": { "$ref": "#/$defs/WhereExpr" },
+        "order_by": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OrderByItem" }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "include": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/IncludeQuery" }
+        },
+        "aggregate": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AggregateItem" },
+          "minItems": 1
+        },
+        "group_by": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FieldName" },
+          "minItems": 1
+        },
+        "having": { "$ref": "#/$defs/WhereExpr" }
+      }
+    }
+  }
+}
