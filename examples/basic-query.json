@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "from": "orders",
+  "select": ["id", "order_number", "status", "created_at"],
+  "where": {
+    "and": [
+      { "field": "status", "op": "=", "value": "PAID" }
+    ]
+  },
+  "limit": 10
+}
