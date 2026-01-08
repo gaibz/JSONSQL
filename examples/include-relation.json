@@ -1,0 +1,14 @@
+{
+  "from": "orders",
+  "select": ["id", "order_number", "status"],
+  "include": {
+    "customer": {
+      "select": ["id", "name", "phone"]
+    },
+    "items": {
+      "select": ["sku", "qty", "price"],
+      "limit": 5
+    }
+  },
+  "limit": 10
+}
