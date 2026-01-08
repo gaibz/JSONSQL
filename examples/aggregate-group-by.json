@@ -1,0 +1,13 @@
+{
+  "from": "orders",
+  "aggregate": [
+    { "fn": "count", "as": "total_orders" },
+    { "fn": "sum", "field": "grand_total", "as": "total_amount" }
+  ],
+  "group_by": ["status"],
+  "having": {
+    "and": [
+      { "field": "total_orders", "op": ">", "value": 10 }
+    ]
+  }
+}
